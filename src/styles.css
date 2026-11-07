@@ -141,6 +141,8 @@ a { color: inherit; }
 .post-card { padding: 16px 17px 11px; }
 .post-topline { display: flex; align-items: center; justify-content: space-between; }
 .post-author { display: flex; align-items: center; gap: 10px; }
+.post-author-button { padding: 0; border: 0; background: transparent; cursor: pointer; text-align: left; }
+.post-author-button:hover strong, .comment-name:hover { color: #638165; }
 .post-author > div { display: grid; gap: 4px; }
 .post-author strong { color: #484a43; font-size: 11px; }
 .post-author > div > span { color: #a1a198; font-size: 9px; }
@@ -149,13 +151,18 @@ a { color: inherit; }
 .post-actions { display: flex; align-items: center; justify-content: space-between; padding-top: 10px; border-top: 1px solid #f0efea; }
 .post-action { display: inline-flex; align-items: center; gap: 6px; padding: 3px 0; border: 0; background: transparent; color: #8c8d84; cursor: pointer; font-size: 10px; }
 .post-action:hover, .post-action.active { color: #638165; }
+.post-action.liked { color: #c7796c; }
+.post-action:disabled { cursor: wait; opacity: .7; }
 .post-kind { display: inline-flex; align-items: center; gap: 4px; color: #aaa99e; font-size: 9px; }
 .post-kind svg { color: #c89788; }
+.admin-badge { display: inline-flex; width: fit-content; align-items: center; gap: 4px; padding: 4px 7px; border-radius: 20px; background: #edf2e9; color: #60795b; font-size: 9px; font-weight: 700; }
 .comments-area { display: grid; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0efea; }
 .comment-row { display: flex; align-items: flex-start; gap: 8px; }
+.comment-avatar-button { flex: 0 0 auto; padding: 0; border: 0; border-radius: 11px; background: transparent; cursor: pointer; }
 .comment-bubble { min-width: 0; flex: 1; padding: 9px 11px; border-radius: 10px; background: #f7f7f3; }
 .comment-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 9px; }
 .comment-heading strong { color: #55584e; font-size: 10px; }
+.comment-name { padding: 0; border: 0; background: transparent; color: #55584e; cursor: pointer; font-size: 10px; font-weight: 700; }
 .comment-heading span { flex: 0 0 auto; color: #a3a39a; font-size: 8px; }
 .comment-bubble p { margin: 5px 0 0; color: #73756c; font-size: 10px; line-height: 1.65; overflow-wrap: anywhere; white-space: pre-wrap; }
 .empty-comments { margin: 0; color: #999a91; font-size: 10px; }
@@ -165,6 +172,8 @@ a { color: inherit; }
 .comment-form > button { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 9px; background: #edf2e9; color: #628060; cursor: pointer; }
 .comment-form > button:disabled { cursor: not-allowed; opacity: .5; }
 .comments-area .notice { font-size: 10px; }
+.delete-comment { flex: 0 0 auto; width: 30px; height: 30px; color: #aa756b; }
+.delete-comment:hover { background: #fbefec; color: #a44234; }
 .feed-aside { display: grid; align-content: start; gap: 13px; padding-top: 71px; }
 .aside-card { border: 1px solid #ebe9e2; border-radius: 13px; background: #fff; }
 .about-card { padding: 16px; }
@@ -205,6 +214,7 @@ a { color: inherit; }
 .profile-title .eyebrow { font-size: 8px; }
 .profile-title h2 { margin: 4px 0 2px; color: #42453d; font-family: "Manrope", sans-serif; font-size: 20px; letter-spacing: -.6px; }
 .profile-title p { margin: 0; color: #9b9c92; font-size: 10px; }
+.public-profile-bio { margin: 19px 0 0; color: #73756c; font-size: 12px; line-height: 1.8; white-space: pre-wrap; }
 .profile-form { display: grid; gap: 15px; margin-top: 26px; padding: 20px; border: 1px solid #eeede7; border-radius: 12px; background: #fdfdfb; }
 .profile-form-heading h3 { margin: 0; color: #4f514a; font-family: "Manrope", sans-serif; font-size: 14px; }
 .profile-form-heading p { margin: 5px 0 0; color: #999a91; font-size: 10px; }
@@ -221,6 +231,38 @@ a { color: inherit; }
 .profile-posts-heading h3 span { margin-left: 4px; color: #9b9c92; font-family: "DM Sans", sans-serif; font-size: 10px; font-weight: 500; }
 .profile-empty { padding: 24px 16px; }
 .profile-empty .text-link { margin-top: 10px; }
+
+/* People directory and moderation */
+.people-page, .admin-page { width: min(100%, 900px); margin: 31px auto 0; }
+.people-intro, .admin-intro { margin-bottom: 20px; }
+.people-intro h2, .admin-intro h2 { margin: 6px 0; color: #45483f; font-family: "Manrope", sans-serif; font-size: 24px; letter-spacing: -.8px; }
+.people-intro p, .admin-intro p { margin: 0; color: #898b82; font-size: 11px; line-height: 1.7; }
+.people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 13px; }
+.person-card { display: flex; min-height: 205px; flex-direction: column; align-items: flex-start; padding: 17px; border: 1px solid #ebe9e2; border-radius: 13px; background: #fff; }
+.person-card h3 { margin: 12px 0 5px; color: #4c4f46; font-family: "Manrope", sans-serif; font-size: 14px; }
+.person-card p { display: -webkit-box; min-height: 34px; overflow: hidden; margin: 8px 0 14px; color: #898b82; font-size: 10px; line-height: 1.65; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.person-card .button { min-height: 34px; margin-top: auto; font-size: 10px; }
+.admin-intro .eyebrow { color: #66836a; }
+.admin-section { margin-top: 19px; padding: 17px; border: 1px solid #ebe9e2; border-radius: 13px; background: #fff; }
+.admin-section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; }
+.admin-section-heading h3 { margin: 0; color: #4d5048; font-family: "Manrope", sans-serif; font-size: 14px; }
+.admin-section-heading p { margin: 4px 0 0; color: #999a91; font-size: 10px; }
+.member-list, .moderation-comments { display: grid; }
+.member-row, .moderation-comment { display: flex; min-height: 54px; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid #f0efea; }
+.member-identity { display: flex; min-width: 0; align-items: center; gap: 9px; padding: 0; border: 0; background: transparent; cursor: pointer; text-align: left; }
+.member-identity > span { display: grid; gap: 4px; }
+.member-identity strong, .moderation-comment strong { color: #53564e; font-size: 11px; }
+.member-identity small, .moderation-comment small { color: #999a91; font-size: 9px; }
+.button-danger { min-height: 32px; padding: 0 10px; border: 1px solid #f0d9d4; background: #fff8f6; color: #a34f43; font-size: 10px; }
+.button-danger:hover { background: #fbece8; }
+.moderation-comment { align-items: flex-start; }
+.moderation-comment > div { min-width: 0; flex: 1; }
+.moderation-comment p { margin: 5px 0; color: #64665d; font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
+.moderation-comment small { display: -webkit-box; overflow: hidden; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.banned-notice { display: grid; justify-items: center; max-width: 410px; padding: 30px; border: 1px solid #ebe9e2; border-radius: 15px; background: #fff; text-align: center; }
+.banned-notice > svg { color: #a34f43; }
+.banned-notice h1 { margin: 13px 0 5px; color: #4d5048; font-family: "Manrope", sans-serif; font-size: 20px; }
+.banned-notice p { margin: 0 0 18px; color: #898b82; font-size: 11px; line-height: 1.7; }
 
 @media (max-width: 1050px) {
   .app-shell { grid-template-columns: 220px minmax(0, 1fr); }
@@ -244,7 +286,7 @@ a { color: inherit; }
   .sidebar { position: fixed; z-index: 5; top: auto; right: 0; bottom: 0; left: 0; display: flex; width: 100%; height: 61px; flex-direction: row; align-items: center; justify-content: space-around; padding: 5px 18px; border-top: 1px solid #eae8e1; border-right: 0; background: #fff; }
   .sidebar-brand, .sidebar-caption, .sidebar-community, .sidebar-user { display: none; }
   .main-nav { display: flex; width: 100%; justify-content: space-around; }
-  .nav-item { min-width: 110px; justify-content: center; gap: 7px; padding: 0 12px; font-size: 10px; }
+  .nav-item { min-width: 0; justify-content: center; gap: 5px; padding: 0 7px; font-size: 9px; }
   .nav-icon { width: auto; }
   .main-area { padding: 0 16px 25px; }
   .topbar { min-height: 88px; }

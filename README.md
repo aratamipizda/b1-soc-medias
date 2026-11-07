@@ -1,12 +1,12 @@
 # Kindred
 
-A small, responsive social app built with React, Vite, and Supabase. It includes email sign-up/sign-in, a profile page, a shared post feed, and comments.
+A small, responsive social app built with React, Vite, and Supabase. It includes email sign-up/sign-in, editable profiles, profile browsing, a shared post feed, likes, comments, and admin moderation.
 
 ## Run locally
 
 1. Install Node.js 20 or later.
 2. Create a Supabase project.
-3. In the Supabase SQL Editor, run [`supabase/schema.sql`](./supabase/schema.sql).
+3. In the Supabase SQL Editor, run [`supabase/schema.sql`](./supabase/schema.sql). If you already ran an earlier version, run the updated script again to add likes and admin moderation.
 4. Copy `.env.example` to `.env.local` and fill in the project URL and anon key from **Supabase → Project Settings → API**:
 
    ```dotenv
@@ -23,6 +23,8 @@ A small, responsive social app built with React, Vite, and Supabase. It includes
    ```
 
 The anon/publishable key is intended for browser apps; access is controlled by the row-level security policies in the SQL schema. **Never add a Supabase service-role key to this app or commit your `.env.local` file.**
+
+The schema grants the `lukagg202@gmail.com` account admin status, including if its account already exists when the schema is applied. Admins can ban/unban members and remove comments; database policies enforce these permissions. Members can browse profiles, edit their own profile, and like/unlike posts.
 
 ## Deploy to GitHub Pages
 

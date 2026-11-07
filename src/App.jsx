@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
   AtSign,
+  Ban,
   Check,
   Feather,
   Heart,
   Leaf,
   LogOut,
   MessageCircle,
-  MoreHorizontal,
+  Shield,
   Send,
   Sparkles,
+  Trash2,
   UserRound,
   UsersRound,
 } from "lucide-react";
@@ -152,13 +154,14 @@ function AuthScreen() {
   );
 }
 
-function PostCard({ post, currentUser, onComment }) {
-  const author = displayName(post.profiles, post.author_email);
+function PostCard({ post, currentUser, isAdmin, onComment, onDeleteComment, onLike, onViewProfile }) {
+  const author = displayName(post.profiles);
   const comments = post.comments || [];
   const [commentText, setCommentText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [likeBusy, setLikeBusy] = useState(false);
 
   async function submitComment(event) {
     event.preventDefault();
@@ -177,21 +180,36 @@ function PostCard({ post, currentUser, onComment }) {
     }
   }
 
+  async function toggleLike() {
+    setLikeBusy(true);
+    setError("");
+    try {
+      await onLike(post.id, post.liked);
+    } catch (likeError) {
+      setError(likeError.message || "Your like couldn't be saved.");
+    } finally {
+      setLikeBusy(false);
+    }
+  }
+
   return (
     <article className="post-card">
       <div className="post-topline">
-        <div className="post-author">
+        <button className="post-author post-author-button" type="button" onClick={() => onViewProfile(post.user_id)}>
           <Avatar name={author} />
           <div><strong>{author}</strong><span>{formatDate(post.created_at)}</span></div>
-        </div>
-        <button className="icon-button post-menu" type="button" aria-label="Post options"><MoreHorizontal size={20} /></button>
+        </button>
+        {post.profiles?.role === "admin" && <span className="admin-badge"><Shield size={12} /> Admin</span>}
       </div>
       <p className="post-body">{post.content}</p>
       <div className="post-actions">
+        <button type="button" className={`post-action ${post.liked ? "liked" : ""}`} onClick={toggleLike} disabled={likeBusy} aria-pressed={post.liked}>
+          <Heart size={17} fill={post.liked ? "currentColor" : "none"} /> {post.likeCount} {post.likeCount === 1 ? "like" : "likes"}
+        </button>
         <button type="button" className={`post-action ${commentsOpen ? "active" : ""}`} onClick={() => setCommentsOpen((open) => !open)}>
           <MessageCircle size={17} /> {comments.length} {comments.length === 1 ? "thought" : "thoughts"}
         </button>
-        <span className="post-kind"><Heart size={14} /> a little kindness</span>
+        <span className="post-kind">a little kindness</span>
       </div>
       {commentsOpen && (
         <div className="comments-area">
@@ -199,8 +217,9 @@ function PostCard({ post, currentUser, onComment }) {
             const commenter = displayName(comment.profiles, comment.author_email);
             return (
               <div className="comment-row" key={comment.id}>
-                <Avatar name={commenter} size="small" />
-                <div className="comment-bubble"><div className="comment-heading"><strong>{commenter}</strong><span>{formatDate(comment.created_at)}</span></div><p>{comment.content}</p></div>
+                <button className="comment-avatar-button" type="button" onClick={() => onViewProfile(comment.user_id)} aria-label={`View ${commenter}'s profile`}><Avatar name={commenter} size="small" /></button>
+                <div className="comment-bubble"><div className="comment-heading"><button className="comment-name" type="button" onClick={() => onViewProfile(comment.user_id)}>{commenter}</button><span>{formatDate(comment.created_at)}</span></div><p>{comment.content}</p></div>
+                {isAdmin && <button className="icon-button delete-comment" type="button" onClick={() => onDeleteComment(comment.id)} aria-label="Delete comment"><Trash2 size={14} /></button>}
               </div>
             );
           })}
@@ -230,6 +249,9 @@ function App() {
   const [profileName, setProfileName] = useState("");
   const [profileBio, setProfileBio] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [people, setPeople] = useState([]);
+  const [selectedProfileId, setSelectedProfileId] = useState(null);
+  const [banned, setBanned] = useState(false);
 
   useEffect(() => {
     if (!supabase) {
@@ -256,21 +278,25 @@ function App() {
   const loadData = useCallback(async () => {
     if (!session?.user) return;
     setError("");
-    const [profileResult, postsResult] = await Promise.all([
-      supabase.from("profiles").select("id, display_name, bio").eq("id", session.user.id).maybeSingle(),
-      supabase.from("posts").select("id, user_id, content, created_at, profiles(display_name), comments(id, user_id, content, created_at, profiles(display_name))").order("created_at", { ascending: false }).limit(50),
+    const [profileResult, postsResult, peopleResult] = await Promise.all([
+      supabase.from("profiles").select("id, display_name, bio, role, banned_at").eq("id", session.user.id).maybeSingle(),
+      supabase.from("posts").select("id, user_id, content, created_at, profiles(id, display_name, bio, role), comments(id, user_id, content, created_at, profiles(id, display_name, bio)), likes(user_id)").order("created_at", { ascending: false }).limit(50),
+      supabase.from("profiles").select("id, display_name, bio, role, banned_at").order("display_name", { ascending: true }),
     ]);
     if (profileResult.error) throw profileResult.error;
     if (postsResult.error) throw postsResult.error;
+    if (peopleResult.error) throw peopleResult.error;
     setProfile(profileResult.data);
+    setPeople(peopleResult.data || []);
+    setBanned(Boolean(profileResult.data?.banned_at));
     setProfileName(profileResult.data?.display_name || session.user.user_metadata?.display_name || "");
     setProfileBio(profileResult.data?.bio || "");
     setPosts((postsResult.data || []).map((post) => ({
       ...post,
-      author_email: post.user_id === session.user.id ? session.user.email : "",
+      liked: (post.likes || []).some((like) => like.user_id === session.user.id),
+      likeCount: (post.likes || []).length,
       comments: (post.comments || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).map((comment) => ({
         ...comment,
-        author_email: comment.user_id === session.user.id ? session.user.email : "",
       })),
     })));
   }, [session]);
@@ -283,8 +309,6 @@ function App() {
     }
     loadData().catch((loadError) => setError(loadError.message || "We couldn't load the community."));
   }, [session, loadData]);
-
-  const ownPosts = useMemo(() => posts.filter((post) => post.user_id === session?.user?.id), [posts, session]);
 
   async function createPost(event) {
     event.preventDefault();
@@ -310,6 +334,40 @@ function App() {
     await loadData();
   }
 
+  async function toggleLike(postId, liked) {
+    const result = liked
+      ? await supabase.from("likes").delete().eq("post_id", postId).eq("user_id", session.user.id)
+      : await supabase.from("likes").insert({ post_id: postId, user_id: session.user.id });
+    if (result.error) throw result.error;
+    await loadData();
+  }
+
+  async function deleteComment(commentId) {
+    if (!window.confirm("Delete this comment? This cannot be undone.")) return;
+    const { error: deleteError } = await supabase.from("comments").delete().eq("id", commentId);
+    if (deleteError) {
+      setError(deleteError.message || "The comment couldn't be deleted.");
+      return;
+    }
+    await loadData();
+  }
+
+  async function setMemberBanned(member, shouldBan) {
+    if (!window.confirm(`${shouldBan ? "Ban" : "Unban"} ${member.display_name}?`)) return;
+    setError("");
+    setSuccess("");
+    const { error: moderationError } = await supabase.rpc("set_user_banned", {
+      target_user_id: member.id,
+      should_ban: shouldBan,
+    });
+    if (moderationError) {
+      setError(moderationError.message || `This member could not be ${shouldBan ? "banned" : "unbanned"}.`);
+      return;
+    }
+    setSuccess(`${member.display_name} has been ${shouldBan ? "banned" : "unbanned"}.`);
+    await loadData();
+  }
+
   async function saveProfile(event) {
     event.preventDefault();
     const cleanName = profileName.trim();
@@ -323,7 +381,8 @@ function App() {
     try {
       const { data, error: profileError } = await supabase
         .from("profiles")
-        .upsert({ id: session.user.id, display_name: cleanName, bio: profileBio.trim() }, { onConflict: "id" })
+        .update({ display_name: cleanName, bio: profileBio.trim() })
+        .eq("id", session.user.id)
         .select("id, display_name, bio")
         .single();
       if (profileError) throw profileError;
@@ -366,9 +425,33 @@ function App() {
     return <main className="loading-screen"><span className="logo-mark"><Leaf size={19} /></span><span>Making yourself at home…</span></main>;
   }
   if (!session) return <AuthScreen />;
+  if (banned) {
+    return (
+      <main className="loading-screen">
+        <div className="banned-notice">
+          <Ban size={28} />
+          <h1>This account has been suspended.</h1>
+          <p>Contact a community admin if you think this was a mistake.</p>
+          <button className="button button-primary" type="button" onClick={signOut}>Sign out</button>
+        </div>
+      </main>
+    );
+  }
 
   const currentUser = { profile, email: session.user.email };
   const name = displayName(profile, session.user.email);
+  const isAdmin = profile?.role === "admin";
+  const selectedProfile = selectedProfileId === session.user.id
+    ? profile
+    : people.find((member) => member.id === selectedProfileId);
+  const selectedProfileName = displayName(selectedProfile, "");
+  const viewedPosts = posts.filter((post) => post.user_id === selectedProfileId);
+
+  function viewProfile(profileId) {
+    setSelectedProfileId(profileId);
+    setPage("profile");
+    setError("");
+  }
 
   return (
     <div className="app-shell">
@@ -376,8 +459,10 @@ function App() {
         <a className="wordmark sidebar-brand" href="#" onClick={(event) => { event.preventDefault(); setPage("feed"); }}><span className="logo-mark"><Leaf size={19} /></span> kindred<span className="wordmark-period">.</span></a>
         <div className="sidebar-caption">YOUR LITTLE CORNER</div>
         <nav className="main-nav" aria-label="Main navigation">
-          <button type="button" className={`nav-item ${page === "feed" ? "nav-active" : ""}`} onClick={() => setPage("feed")}><span className="nav-icon"><Sparkles size={18} /></span> Your feed</button>
-          <button type="button" className={`nav-item ${page === "profile" ? "nav-active" : ""}`} onClick={() => setPage("profile")}><span className="nav-icon"><UserRound size={18} /></span> Your profile</button>
+          <button type="button" className={`nav-item ${page === "feed" ? "nav-active" : ""}`} onClick={() => setPage("feed")}><span className="nav-icon"><Sparkles size={18} /></span> Feed</button>
+          <button type="button" className={`nav-item ${page === "people" ? "nav-active" : ""}`} onClick={() => setPage("people")}><span className="nav-icon"><UsersRound size={18} /></span> People</button>
+          <button type="button" className={`nav-item ${page === "profile" && selectedProfileId === session.user.id ? "nav-active" : ""}`} onClick={() => viewProfile(session.user.id)}><span className="nav-icon"><UserRound size={18} /></span> Profile</button>
+          {isAdmin && <button type="button" className={`nav-item ${page === "admin" ? "nav-active" : ""}`} onClick={() => setPage("admin")}><span className="nav-icon"><Shield size={18} /></span> Admin</button>}
         </nav>
         <div className="sidebar-community"><div className="community-icon"><UsersRound size={18} /></div><strong>Good company</strong><p>A place for kind words, little wins, and whatever’s on your mind.</p><span><span className="online-dot" /> YOU’RE RIGHT AT HOME</span></div>
         <div className="sidebar-user">
@@ -388,7 +473,7 @@ function App() {
       </aside>
 
       <main className="main-area">
-        <header className="topbar"><div><span className="topbar-overline">A LITTLE MORE CONNECTED</span><h1>{page === "feed" ? "Your little corner" : "A bit about you"}</h1></div><button className="button button-light topbar-profile" onClick={() => setPage("profile")}><Avatar name={name} size="small" /> Your profile <ArrowRight size={15} /></button></header>
+        <header className="topbar"><div><span className="topbar-overline">A LITTLE MORE CONNECTED</span><h1>{page === "feed" ? "Your little corner" : page === "people" ? "Good company" : page === "admin" ? "Community care" : selectedProfileId === session.user.id ? "A bit about you" : `${selectedProfileName}'s profile`}</h1></div><button className="button button-light topbar-profile" onClick={() => viewProfile(session.user.id)}><Avatar name={name} size="small" /> Your profile <ArrowRight size={15} /></button></header>
         {error && <div className="main-notice"><Notice>{error}</Notice></div>}
         {success && <div className="main-notice"><Notice tone="success">{success}</Notice></div>}
 
@@ -401,28 +486,51 @@ function App() {
                 <div className="composer-bottom"><span><Feather size={15} /> A little kindness goes a long way</span><button className="button button-primary" type="submit" disabled={posting || !draft.trim()}>{posting ? "Sharing…" : "Share a thought"} {!posting && <ArrowRight size={16} />}</button></div>
               </form>
               <div className="feed-heading"><div><span className="eyebrow">THE NEIGHBORHOOD</span><h2>Latest thoughts</h2></div><span className="feed-count">{posts.length} {posts.length === 1 ? "post" : "posts"}</span></div>
-              {posts.length ? <div className="post-list">{posts.map((post) => <PostCard key={post.id} post={post} currentUser={currentUser} onComment={createComment} />)}</div> : <div className="empty-feed"><span>✳</span><h3>A blank page, in the best way.</h3><p>No thoughts have been shared yet. Be the first to say hello.</p></div>}
+              {posts.length ? <div className="post-list">{posts.map((post) => <PostCard key={post.id} post={post} currentUser={currentUser} isAdmin={isAdmin} onComment={createComment} onDeleteComment={deleteComment} onLike={toggleLike} onViewProfile={viewProfile} />)}</div> : <div className="empty-feed"><span>✳</span><h3>A blank page, in the best way.</h3><p>No thoughts have been shared yet. Be the first to say hello.</p></div>}
               <button className="back-top" type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}><ArrowLeft size={15} /> Back to the top</button>
             </section>
             <aside className="feed-aside">
               <div className="aside-card about-card"><span className="aside-icon"><Heart size={17} /></span><span className="eyebrow">A GENTLE REMINDER</span><h3>There’s room for your voice here.</h3><p>Share the small stuff, cheer each other on, and be kind. That’s the whole thing.</p><div className="about-divider" /><span className="aside-signoff">Glad you’re here <span>♡</span></span></div>
-              <div className="aside-card profile-mini"><div className="profile-mini-top"><Avatar name={name} /><div><strong>{name}</strong><span>Making a little space online</span></div></div><p>{profile?.bio || "Add a little something about yourself and help your new neighbors get to know you."}</p><button type="button" className="text-link" onClick={() => setPage("profile")}>Get to know me <ArrowRight size={14} /></button></div>
+              <div className="aside-card profile-mini"><div className="profile-mini-top"><Avatar name={name} /><div><strong>{name}</strong><span>Making a little space online</span></div></div><p>{profile?.bio || "Add a little something about yourself and help your new neighbors get to know you."}</p><button type="button" className="text-link" onClick={() => viewProfile(session.user.id)}>Get to know me <ArrowRight size={14} /></button></div>
               <span className="aside-footer">KINDRED <span>·</span> A SMALL CORNER OF THE INTERNET</span>
             </aside>
           </div>
-        ) : (
+        ) : page === "profile" ? (
           <section className="profile-layout">
             <div className="profile-cover"><span>✳</span><span>✿</span></div>
             <div className="profile-content">
-              <div className="profile-title"><Avatar name={name} size="large" /><div><span className="eyebrow">YOUR LITTLE INTRODUCTION</span><h2>{name}</h2><p>{session.user.email}</p></div></div>
-              <form className="profile-form" onSubmit={saveProfile}>
+              {!selectedProfile && <div className="empty-feed"><h3>We couldn’t find that profile.</h3><button className="text-link" type="button" onClick={() => setPage("people")}>Browse people <ArrowRight size={14} /></button></div>}
+              {selectedProfile && <div className="profile-title"><Avatar name={selectedProfileName} size="large" /><div><span className="eyebrow">{selectedProfileId === session.user.id ? "YOUR LITTLE INTRODUCTION" : "A LITTLE INTRODUCTION"}</span><h2>{selectedProfileName}</h2>{selectedProfile.role === "admin" && <span className="admin-badge"><Shield size={12} /> Community admin</span>}</div></div>}
+              {selectedProfileId === session.user.id && selectedProfile && <form className="profile-form" onSubmit={saveProfile}>
                 <div className="profile-form-heading"><h3>Your profile</h3><p>A few words to help people get to know you.</p></div>
                 <label className="field-label">Display name<input className="plain-input" required maxLength={40} value={profileName} onChange={(event) => setProfileName(event.target.value)} placeholder="Your name" /></label>
                 <label className="field-label">A little about you<textarea className="plain-input profile-bio" maxLength={160} rows={4} value={profileBio} onChange={(event) => setProfileBio(event.target.value)} placeholder="What do you love? What brings you here?" /></label>
                 <div className="profile-form-footer"><span>{profileBio.length}/160</span><button className="button button-primary" type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"} {!savingProfile && <Check size={16} />}</button></div>
-              </form>
-              <div className="profile-posts-heading"><div><span className="eyebrow">YOUR WORDS</span><h3>Your thoughts <span>{ownPosts.length}</span></h3></div><button type="button" className="text-link" onClick={() => setPage("feed")}><ArrowLeft size={14} /> Back to feed</button></div>
-              {ownPosts.length ? <div className="post-list">{ownPosts.map((post) => <PostCard key={post.id} post={post} currentUser={currentUser} onComment={createComment} />)}</div> : <div className="empty-feed profile-empty"><span>✳</span><h3>Your story starts here.</h3><p>When you share your first thought, it’ll find a home right here.</p><button type="button" className="text-link" onClick={() => setPage("feed")}>Write your first post <ArrowRight size={14} /></button></div>}
+              </form>}
+              {selectedProfileId !== session.user.id && selectedProfile && <p className="public-profile-bio">{selectedProfile.bio || "This neighbor hasn’t added a bio yet."}</p>}
+              <div className="profile-posts-heading"><div><span className="eyebrow">YOUR WORDS</span><h3>{selectedProfileId === session.user.id ? "Your thoughts" : `${selectedProfileName}'s thoughts`} <span>{viewedPosts.length}</span></h3></div><button type="button" className="text-link" onClick={() => setPage("feed")}><ArrowLeft size={14} /> Back to feed</button></div>
+              {viewedPosts.length ? <div className="post-list">{viewedPosts.map((post) => <PostCard key={post.id} post={post} currentUser={currentUser} isAdmin={isAdmin} onComment={createComment} onDeleteComment={deleteComment} onLike={toggleLike} onViewProfile={viewProfile} />)}</div> : <div className="empty-feed profile-empty"><span>✳</span><h3>{selectedProfileId === session.user.id ? "Your story starts here." : "No thoughts shared yet."}</h3><p>{selectedProfileId === session.user.id ? "When you share your first thought, it’ll find a home right here." : "Check back when they’ve shared something with the community."}</p>{selectedProfileId === session.user.id && <button type="button" className="text-link" onClick={() => setPage("feed")}>Write your first post <ArrowRight size={14} /></button>}</div>}
+            </div>
+          </section>
+        ) : page === "people" ? (
+          <section className="people-page">
+            <div className="people-intro"><span className="eyebrow">THE NEIGHBORHOOD</span><h2>Meet your people.</h2><p>Get to know the folks sharing this little corner with you.</p></div>
+            {people.length ? <div className="people-grid">{people.map((member) => <article className="person-card" key={member.id}>
+              <Avatar name={displayName(member, "")} size="large" />
+              <h3>{displayName(member, "")}</h3>
+              {member.role === "admin" && <span className="admin-badge"><Shield size={12} /> Community admin</span>}
+              <p>{member.bio || "A neighbor in the Kindred community."}</p>
+              <button className="button button-light" type="button" onClick={() => viewProfile(member.id)}>View profile <ArrowRight size={15} /></button>
+            </article>)}</div> : <div className="empty-feed"><h3>No neighbors yet.</h3><p>Check back when more people join.</p></div>}
+          </section>
+        ) : (
+          <section className="admin-page">
+            <div className="admin-intro"><span className="eyebrow"><Shield size={13} /> ADMIN TOOLS</span><h2>Keep this a kind place.</h2><p>Manage memberships and remove comments that don’t belong. Changes take effect immediately.</p></div>
+            <div className="admin-section"><div className="admin-section-heading"><div><h3>Community members</h3><p>{people.length} {people.length === 1 ? "person" : "people"}</p></div></div>
+              <div className="member-list">{people.map((member) => <article className="member-row" key={member.id}><button className="member-identity" type="button" onClick={() => viewProfile(member.id)}><Avatar name={displayName(member, "")} size="small" /><span><strong>{displayName(member, "")}</strong><small>{member.role === "admin" ? "Admin" : "Member"}{member.banned_at ? " · Banned" : ""}</small></span></button>{member.id !== session.user.id && member.role !== "admin" && <button className={`button ${member.banned_at ? "button-light" : "button-danger"}`} type="button" onClick={() => setMemberBanned(member, !member.banned_at)}>{member.banned_at ? <UsersRound size={14} /> : <Ban size={14} />}{member.banned_at ? "Unban" : "Ban"}</button>}</article>)}</div>
+            </div>
+            <div className="admin-section"><div className="admin-section-heading"><div><h3>Recent comments</h3><p>Remove comments from the feed if they break community guidelines.</p></div></div>
+              <div className="moderation-comments">{posts.flatMap((post) => (post.comments || []).map((comment) => ({ ...comment, postContent: post.content, postId: post.id }))).slice(0, 30).map((comment) => <article className="moderation-comment" key={comment.id}><div><strong>{displayName(comment.profiles, "")}</strong><p>{comment.content}</p><small>On: {comment.postContent}</small></div><button className="icon-button delete-comment" type="button" onClick={() => deleteComment(comment.id)} aria-label="Delete comment"><Trash2 size={16} /></button></article>)}</div>
             </div>
           </section>
         )}
